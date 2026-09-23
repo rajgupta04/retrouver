@@ -67,3 +67,12 @@ CASCADEs to its MeetingException rows, because an exception to a
 series is meaningless once the series itself is gone. Same "delete"
 action, different cascade behavior, chosen per-relationship based on
 whether the child data is still meaningful without its parent.
+
+## Spring JDBC (JdbcTemplate) over JPA/Hibernate
+Used Spring's JdbcTemplate with hand-written SQL instead of JPA/Hibernate.
+Three reasons: (1) SQLite has limited and unofficial JPA dialect support —
+fighting Hibernate to generate correct SQLite DDL is wasted effort;
+(2) the queries in this system are straightforward CRUD + a few indexed
+lookups, so an ORM adds abstraction overhead without simplifying anything;
+(3) hand-written SQL is easier to explain line-by-line in a live interview,
+which is the whole evaluation context for this project.
