@@ -88,3 +88,13 @@ fighting Hibernate to generate correct SQLite DDL is wasted effort;
 lookups, so an ORM adds abstraction overhead without simplifying anything;
 (3) hand-written SQL is easier to explain line-by-line in a live interview,
 which is the whole evaluation context for this project.
+
+## Stateless JWT auth over server-side sessions
+Used JWT tokens (HS256 via JJWT) with no server-side session state. The
+token IS the session — no session store, no sticky routing, no expiry
+cleanup. Trade-off: you can't revoke a token before it expires without
+maintaining a blacklist (which reintroduces server-side state), but for
+a case study that's acceptable. BCrypt for password hashing because it's
+deliberately slow (tunable work factor) — prevents brute-force even if
+the hash table leaks. Login returns the same error for "unknown email"
+and "wrong password" to prevent email enumeration attacks.
