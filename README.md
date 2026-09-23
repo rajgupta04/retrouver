@@ -26,19 +26,23 @@ Body: { "email": "raj@lpu.in", "password": "secret" }
 
 All endpoints below require `Authorization: Bearer <token>`.
 
-### Bookings
+### Bookings & Monitoring
 
 ```
-POST   /rooms/{roomId}/bookings               → book a single meeting
-POST   /rooms/{roomId}/bookings/recurring      → book a recurring series
+POST   /rooms/{roomId}/bookings               → book a single meeting (with attendees)
+POST   /rooms/{roomId}/bookings/recurring      → book a recurring series (with attendees)
 PATCH  /bookings/{bookingId}?scope=THIS|THIS_AND_FUTURE|ALL → edit occurrence(s)
 DELETE /bookings/{bookingId}?scope=THIS|THIS_AND_FUTURE|ALL → cancel occurrence(s)
+GET    /bookings/{bookingId}/attendees        → list attendees and RSVP status
+GET    /actuator/health                       → service health check (public)
+GET    /actuator/metrics                      → JVM & application metrics (public)
 ```
 
 **Single booking request:**
 ```json
 {
   "organizerId": "uuid",
+  "attendeeIds": ["uuid-1", "uuid-2"],
   "start": "2026-01-15T10:00:00",
   "end": "2026-01-15T11:00:00",
   "timezoneId": "Asia/Kolkata",
@@ -50,6 +54,7 @@ DELETE /bookings/{bookingId}?scope=THIS|THIS_AND_FUTURE|ALL → cancel occurrenc
 ```json
 {
   "organizerId": "uuid",
+  "attendeeIds": ["uuid-1", "uuid-2"],
   "start": "2026-01-15T10:00:00",
   "end": "2026-01-15T11:00:00",
   "timezoneId": "America/New_York",
@@ -131,19 +136,30 @@ Client request
 
 Where n = number of existing bookings in a room, k = number of occurrences in a series.
 
-## Concurrency / Fault Tolerance
+## Concurrency & Fault Tolerance
 
+- **Declarative Transactions (`@Transactional`)**: All booking operations (single & recurring) run within atomic database transactions. If an insert fails or any recurring slot clashes, all DB writes roll back completely.
 - **Optimistic locking**: `UPDATE ... WHERE version = ?` — prevents the race where two requests both pass conflict-checking and both write. Zero-row update = stale → reject and retry.
 - **WAL mode**: `PRAGMA journal_mode=WAL` — lets readers proceed concurrently with a writer (SQLite default blocks readers during writes).
 - **FK enforcement**: `PRAGMA foreign_keys=ON` — SQLite defaults this to OFF. Without it, RESTRICT/CASCADE constraints are silently decorative.
 - **All-or-nothing recurring booking**: if any occurrence in a series conflicts, the entire series is rejected — no partial bookings.
+
+## Caching & Performance Optimization
+
+- **Spring Cache Abstraction**: Active rooms (`/rooms`) are cached in-memory with `@Cacheable(value = "rooms")` to minimize repeated DB queries during high-concurrency room discovery.
+- **Cache Eviction**: Adding or deactivating rooms automatically triggers `@CacheEvict(value = "rooms", allEntries = true)`.
+
+## Monitoring & Observability
+
+- **Spring Boot Actuator**: Provides real-time health checks (`/actuator/health`) and application/JVM metrics (`/actuator/metrics`).
+- **Structured Error Handling**: Centralized `GlobalExceptionHandler` (`@RestControllerAdvice`) provides uniform JSON error contracts across all endpoints with automated SLF4J audit logging.
 
 ## Auth
 
 - **JWT (HS256)**: stateless — the token IS the session. No server-side session store.
 - **BCrypt**: deliberately slow password hashing. Prevents brute-force on leaked hashes.
 - **Same login error**: "Invalid email or password" for both unknown-email and wrong-password — prevents email enumeration.
-- **Endpoint protection**: `/auth/**` is public; everything else requires `Authorization: Bearer <token>`.
+- **Endpoint protection**: `/auth/**` and `/actuator/**` are public; business endpoints require `Authorization: Bearer <token>`.
 
 ## Design Decisions
 
@@ -155,30 +171,36 @@ See [DECISIONS.md](DECISIONS.md) for the full reasoning behind each choice:
 4. UTC + IANA zone ID (fixed offset breaks at DST transitions)
 5. Half-open `[s,e)` overlap rule (correct boundary behavior)
 6. Optimistic locking via version column (prevents concurrent booking race)
-7. RESTRICT on Room FK, CASCADE on MeetingException FK
+7. RESTRICT on Room FK, CASCADE on MeetingException and Attendee FK
 8. Spring Boot (DI + ecosystem)
 9. JdbcTemplate over JPA (SQLite dialect issues, interview explainability)
 10. Stateless JWT over sessions (no server-side state)
+11. Atomic series transactions via `@Transactional`
+12. Read caching on rooms with mutation eviction
+13. Observability with Spring Boot Actuator
+14. Uniform error envelopes via `@RestControllerAdvice`
 
 ## Tech Stack
 
 | Component | Choice | Why |
 |-----------|--------|-----|
 | Language | Java 17 | Switch expressions, records, text blocks |
-| Framework | Spring Boot 3.3 | DI, embedded server, security, JDBC |
+| Framework | Spring Boot 3.3 | DI, embedded server, security, JDBC, actuator, cache |
 | Database | SQLite | Zero-config, file-based, sufficient for case study |
 | Persistence | JdbcTemplate | Hand-written SQL, no ORM overhead |
 | Auth | Spring Security + JJWT | Stateless JWT, BCrypt |
-| Testing | JUnit 5 | Via spring-boot-starter-test |
+| Monitoring | Spring Boot Actuator | Production health and metrics endpoints |
+| Testing | JUnit 5 + Mockito | Via spring-boot-starter-test (57 tests) |
 | Build | Maven | Standard, no Gradle complexity |
 
 ## Project Structure
 
 ```
 src/main/java/com/booking/
-├── BookingApplication.java          # Spring Boot entry point
+├── BookingApplication.java          # Spring Boot entry point (@EnableCaching)
 ├── api/
-│   └── BookingController.java       # REST endpoints + request DTOs
+│   ├── BookingController.java       # REST endpoints + request DTOs
+│   └── GlobalExceptionHandler.java  # Centralized exception envelope
 ├── auth/
 │   ├── AuthController.java          # Register + login
 │   ├── JwtService.java              # Token generation + validation
@@ -187,6 +209,7 @@ src/main/java/com/booking/
 ├── conflict/
 │   └── ConflictChecker.java         # Sorted interval list + binary search
 ├── domain/
+│   ├── Attendee.java                # Attendee entity with RSVP status enum
 │   ├── Meeting.java                 # Core entity (UTC times, version lock)
 │   ├── MeetingException.java        # Per-occurrence override (MODIFIED/CANCELLED)
 │   ├── RecurrenceRule.java          # Pattern-only value object (no dtstart)
@@ -199,21 +222,24 @@ src/main/java/com/booking/
 │   └── MonthlyStrategy.java         # By month day OR by day+setpos
 ├── repository/
 │   ├── DatabaseInitializer.java     # SQLite DDL (CREATE TABLE IF NOT EXISTS)
+│   ├── AttendeeRepository.java      # CRUD for attendees
 │   ├── MeetingRepository.java       # CRUD + optimistic lock update
 │   ├── MeetingExceptionRepository.java
 │   ├── RecurrenceRuleRepository.java
-│   ├── RoomRepository.java
+│   ├── RoomRepository.java          # Caching + deactivation
 │   └── UserRepository.java
 ├── service/
-│   └── BookingService.java          # Orchestrator (book/edit/cancel)
+│   └── BookingService.java          # Orchestrator (@Transactional book/edit/cancel)
 └── timezone/
     └── TimezoneResolver.java        # DST gap/fold handling
 
 src/test/java/com/booking/
 ├── conflict/
-│   └── ConflictCheckerTest.java     # 16 tests (overlap, half-open, multi-room, batch)
+│   └── ConflictCheckerTest.java     # 18 tests (overlap, half-open, multi-room, batch)
 ├── recurrence/
 │   └── RecurrenceExpanderTest.java  # 18 tests (all 3 strategies + edge cases)
+├── service/
+│   └── BookingServiceTest.java      # 7 tests (all-or-nothing, series edit/cancel, attendees)
 └── timezone/
     └── TimezoneResolverTest.java    # 14 tests (gap, overlap, cross-DST recurring)
 ```
