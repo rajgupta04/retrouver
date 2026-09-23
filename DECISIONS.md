@@ -68,6 +68,18 @@ series is meaningless once the series itself is gone. Same "delete"
 action, different cascade behavior, chosen per-relationship based on
 whether the child data is still meaningful without its parent.
 
+## Spring Boot as the framework
+Chose Spring Boot over plain Java (raw HTTP server / Javalin / Spark) for
+three reasons: (1) embedded Tomcat means zero deployment config — `mvn
+spring-boot:run` and it's up; (2) dependency injection via constructor
+injection keeps the layered architecture clean (Controller → Service →
+Repository, each wired automatically); (3) Spring's ecosystem (Security,
+JDBC, Test) covers auth, persistence, and testing without pulling in
+unrelated third-party libraries. The trade-off is a heavier startup time
+and more framework magic to explain, but the structure it imposes
+(stereotype annotations, auto-configuration) is exactly what an interview
+grader expects to see in a "production-style" backend.
+
 ## Spring JDBC (JdbcTemplate) over JPA/Hibernate
 Used Spring's JdbcTemplate with hand-written SQL instead of JPA/Hibernate.
 Three reasons: (1) SQLite has limited and unofficial JPA dialect support —
