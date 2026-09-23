@@ -200,4 +200,58 @@ class BookingServiceTest {
         assertThat(meeting.getStatus()).isEqualTo(MeetingStatus.CANCELLED);
         verify(meetingRepo).updateWithVersion(meeting, 0);
     }
+
+    @Test
+    void editOccurrence_thisAndFuture_splitsSeriesAndTruncatesOld() {
+        UUID meetingId = UUID.randomUUID();
+        UUID oldRuleId = UUID.randomUUID();
+        Meeting meeting = new Meeting(meetingId, roomId, organizerId,
+                timezoneResolver.toUtc(LocalDateTime.of(2026, 5, 1, 10, 0), java.time.ZoneId.of("Asia/Kolkata")),
+                timezoneResolver.toUtc(LocalDateTime.of(2026, 5, 1, 11, 0), java.time.ZoneId.of("Asia/Kolkata")),
+                "Asia/Kolkata", "Sync");
+        meeting.setRecurrenceRuleId(oldRuleId);
+
+        RecurrenceRule oldRule = new RecurrenceRule(oldRuleId, Frequency.WEEKLY);
+        oldRule.setIntervalN(1);
+        oldRule.setByDay(new String[]{"FR"});
+
+        when(meetingRepo.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(ruleRepo.findById(oldRuleId)).thenReturn(Optional.of(oldRule));
+        when(exceptionRepo.findByMasterIdFromDate(any(), any())).thenReturn(List.of());
+
+        LocalDate splitDate = LocalDate.of(2026, 5, 15);
+        LocalDateTime newStart = LocalDateTime.of(2026, 5, 15, 14, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 5, 15, 15, 0);
+
+        bookingService.editOccurrence(meetingId, splitDate, BookingService.EditScope.THIS_AND_FUTURE, newStart, newEnd);
+
+        // 1. Old rule must be truncated to splitDate - 1
+        verify(ruleRepo).updateUntil(oldRuleId, splitDate.minusDays(1));
+
+        // 2. New meeting must link back to old meeting via parentMeetingId
+        ArgumentCaptor<Meeting> meetingCaptor = ArgumentCaptor.forClass(Meeting.class);
+        verify(meetingRepo).save(meetingCaptor.capture());
+        assertThat(meetingCaptor.getValue().getParentMeetingId()).isEqualTo(meetingId);
+    }
+
+    @Test
+    void cancelOccurrence_thisAndFuture_truncatesOldSeriesUntil() {
+        UUID meetingId = UUID.randomUUID();
+        UUID ruleId = UUID.randomUUID();
+        Meeting meeting = new Meeting(meetingId, roomId, organizerId,
+                timezoneResolver.toUtc(LocalDateTime.of(2026, 5, 1, 10, 0), java.time.ZoneId.of("Asia/Kolkata")),
+                timezoneResolver.toUtc(LocalDateTime.of(2026, 5, 1, 11, 0), java.time.ZoneId.of("Asia/Kolkata")),
+                "Asia/Kolkata", "Sync");
+        meeting.setRecurrenceRuleId(ruleId);
+        RecurrenceRule rule = new RecurrenceRule(ruleId, Frequency.WEEKLY);
+        rule.setIntervalN(1);
+        rule.setByDay(new String[]{"FR"});
+        when(meetingRepo.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(ruleRepo.findById(ruleId)).thenReturn(Optional.of(rule));
+
+        LocalDate cancelFrom = LocalDate.of(2026, 5, 15);
+        bookingService.cancelOccurrence(meetingId, cancelFrom, BookingService.EditScope.THIS_AND_FUTURE);
+
+        verify(ruleRepo).updateUntil(ruleId, cancelFrom.minusDays(1));
+    }
 }
