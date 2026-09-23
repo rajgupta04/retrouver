@@ -67,11 +67,17 @@ public class Meeting {
 
     public UUID getId() { return id; }
     public UUID getRoomId() { return roomId; }
+    public UUID getOrganizerId() { return organizerId; }
     public Instant getStartUtc() { return startUtc; }
+    public void setStartUtc(Instant startUtc) { this.startUtc = startUtc; }
     public Instant getEndUtc() { return endUtc; }
+    public void setEndUtc(Instant endUtc) { this.endUtc = endUtc; }
     public String getTimezoneId() { return timezoneId; }
+    public String getTitle() { return title; }
     public UUID getRecurrenceRuleId() { return recurrenceRuleId; }
     public void setRecurrenceRuleId(UUID recurrenceRuleId) { this.recurrenceRuleId = recurrenceRuleId; }
+    public UUID getParentMeetingId() { return parentMeetingId; }
+    public void setParentMeetingId(UUID parentMeetingId) { this.parentMeetingId = parentMeetingId; }
     public MeetingStatus getStatus() { return status; }
     public void setStatus(MeetingStatus status) { this.status = status; }
     public int getVersion() { return version; }

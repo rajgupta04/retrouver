@@ -29,6 +29,7 @@ public class MeetingException {
         this.type = type;
     }
 
+    public UUID getId() { return id; }
     public UUID getMasterMeetingId() { return masterMeetingId; }
     public LocalDate getOriginalOccurrenceDate() { return originalOccurrenceDate; }
     public Instant getNewStartUtc() { return newStartUtc; }

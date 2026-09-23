@@ -42,6 +42,7 @@ public class RecurrenceRule {
         this.freq = freq;
     }
 
+    public UUID getId() { return id; }
     public Frequency getFreq() { return freq; }
     public int getIntervalN() { return intervalN; }
     public void setIntervalN(int intervalN) { this.intervalN = intervalN; }
