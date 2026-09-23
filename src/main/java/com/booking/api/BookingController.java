@@ -23,14 +23,10 @@ public class BookingController {
 
     @PostMapping("/rooms/{roomId}/bookings")
     public ResponseEntity<?> bookSingle(@PathVariable UUID roomId, @RequestBody BookingRequest request) {
-        try {
-            Meeting meeting = bookingService.bookSingle(roomId, request.organizerId(),
-                    request.attendeeIds(), request.start(), request.end(),
-                    request.timezoneId(), request.title());
-            return ResponseEntity.status(201).body(meeting);
-        } catch (BookingService.BookingConflictException e) {
-            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
-        }
+        Meeting meeting = bookingService.bookSingle(roomId, request.organizerId(),
+                request.attendeeIds(), request.start(), request.end(),
+                request.timezoneId(), request.title());
+        return ResponseEntity.status(201).body(meeting);
     }
 
     @PostMapping("/rooms/{roomId}/bookings/recurring")
@@ -48,33 +44,23 @@ public class BookingController {
     public ResponseEntity<?> editOccurrence(@PathVariable UUID bookingId,
                                             @RequestParam BookingService.EditScope scope,
                                             @RequestBody EditRequest request) {
-        try {
-            bookingService.editOccurrence(bookingId, request.occurrenceDate(), scope,
-                    request.newStart(), request.newEnd());
-            return ResponseEntity.ok(Map.of(
-                    "message", "Occurrence edited successfully",
-                    "scope", scope.name()
-            ));
-        } catch (BookingService.BookingConflictException | BookingService.StaleVersionException e) {
-            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
-        }
+        bookingService.editOccurrence(bookingId, request.occurrenceDate(), scope,
+                request.newStart(), request.newEnd());
+        return ResponseEntity.ok(Map.of(
+                "message", "Occurrence edited successfully",
+                "scope", scope.name()
+        ));
     }
 
     @DeleteMapping("/bookings/{bookingId}")
     public ResponseEntity<?> cancelOccurrence(@PathVariable UUID bookingId,
                                               @RequestParam BookingService.EditScope scope,
                                               @RequestParam(required = false) LocalDate occurrenceDate) {
-        try {
-            bookingService.cancelOccurrence(bookingId, occurrenceDate, scope);
-            return ResponseEntity.ok(Map.of(
-                    "message", "Occurrence cancelled successfully",
-                    "scope", scope.name()
-            ));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
-        }
+        bookingService.cancelOccurrence(bookingId, occurrenceDate, scope);
+        return ResponseEntity.ok(Map.of(
+                "message", "Occurrence cancelled successfully",
+                "scope", scope.name()
+        ));
     }
 
     @GetMapping("/bookings/{bookingId}/attendees")
