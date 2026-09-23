@@ -39,7 +39,7 @@ public class MeetingRepository {
 
     public void save(Meeting m) {
         jdbc.update("""
-            INSERT INTO meetings (id, room_id, organizer_id, start_utc, end_utc,
+            INSERT INTO meeting (id, room_id, organizer_id, start_utc, end_utc,
                 timezone_id, title, recurrence_rule_id, parent_meeting_id,
                 status, version, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -62,7 +62,7 @@ public class MeetingRepository {
 
     public Optional<Meeting> findById(UUID id) {
         List<Meeting> results = jdbc.query(
-                "SELECT * FROM meetings WHERE id = ?",
+                "SELECT * FROM meeting WHERE id = ?",
                 rowMapper, id.toString()
         );
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
@@ -74,7 +74,7 @@ public class MeetingRepository {
      */
     public List<Meeting> findByRoomIdOrderByStart(UUID roomId) {
         return jdbc.query(
-                "SELECT * FROM meetings WHERE room_id = ? AND status = 'ACTIVE' ORDER BY start_utc",
+                "SELECT * FROM meeting WHERE room_id = ? AND status = 'ACTIVE' ORDER BY start_utc",
                 rowMapper, roomId.toString()
         );
     }
@@ -87,7 +87,7 @@ public class MeetingRepository {
      */
     public boolean updateWithVersion(Meeting m, int expectedVersion) {
         int rows = jdbc.update("""
-            UPDATE meetings SET start_utc = ?, end_utc = ?, timezone_id = ?,
+            UPDATE meeting SET start_utc = ?, end_utc = ?, timezone_id = ?,
                 status = ?, version = ?, updated_at = ?,
                 recurrence_rule_id = ?
             WHERE id = ? AND version = ?
@@ -106,6 +106,6 @@ public class MeetingRepository {
     }
 
     public void deleteById(UUID id) {
-        jdbc.update("DELETE FROM meetings WHERE id = ?", id.toString());
+        jdbc.update("DELETE FROM meeting WHERE id = ?", id.toString());
     }
 }

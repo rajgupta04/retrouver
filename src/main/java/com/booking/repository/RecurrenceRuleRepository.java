@@ -36,7 +36,7 @@ public class RecurrenceRuleRepository {
         int bySetPos = rs.getInt("by_set_pos");
         if (!rs.wasNull()) r.setBySetPos(bySetPos);
 
-        String until = rs.getString("until_date");
+        String until = rs.getString("until");
         if (until != null) r.setUntil(LocalDate.parse(until));
 
         int count = rs.getInt("count");
@@ -47,8 +47,8 @@ public class RecurrenceRuleRepository {
 
     public void save(RecurrenceRule rule) {
         jdbc.update("""
-            INSERT INTO recurrence_rules (id, freq, interval_n, by_day,
-                by_month_day, by_set_pos, until_date, count)
+            INSERT INTO recurrence_rule (id, freq, interval_n, by_day,
+                by_month_day, by_set_pos, until, count)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
                 rule.getId().toString(),
@@ -64,14 +64,14 @@ public class RecurrenceRuleRepository {
 
     public Optional<RecurrenceRule> findById(UUID id) {
         List<RecurrenceRule> results = jdbc.query(
-                "SELECT * FROM recurrence_rules WHERE id = ?",
+                "SELECT * FROM recurrence_rule WHERE id = ?",
                 rowMapper, id.toString()
         );
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     public void updateUntil(UUID id, LocalDate newUntil) {
-        jdbc.update("UPDATE recurrence_rules SET until_date = ? WHERE id = ?",
+        jdbc.update("UPDATE recurrence_rule SET until = ? WHERE id = ?",
                 newUntil.toString(), id.toString());
     }
 }

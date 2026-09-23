@@ -29,22 +29,22 @@ public class RoomRepository {
     };
 
     public void save(Room room) {
-        jdbc.update("INSERT INTO rooms (id, name, capacity, active) VALUES (?, ?, ?, ?)",
+        jdbc.update("INSERT INTO room (id, name, capacity, active) VALUES (?, ?, ?, ?)",
                 room.getId().toString(), room.getName(), room.getCapacity(),
                 room.isActive() ? 1 : 0);
     }
 
     public Optional<Room> findById(UUID id) {
-        List<Room> results = jdbc.query("SELECT * FROM rooms WHERE id = ?",
+        List<Room> results = jdbc.query("SELECT * FROM room WHERE id = ?",
                 rowMapper, id.toString());
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     public List<Room> findAllActive() {
-        return jdbc.query("SELECT * FROM rooms WHERE active = 1", rowMapper);
+        return jdbc.query("SELECT * FROM room WHERE active = 1", rowMapper);
     }
 
     public void deactivate(UUID id) {
-        jdbc.update("UPDATE rooms SET active = 0 WHERE id = ?", id.toString());
+        jdbc.update("UPDATE room SET active = 0 WHERE id = ?", id.toString());
     }
 }

@@ -36,7 +36,7 @@ public class MeetingExceptionRepository {
 
     public void save(MeetingException ex) {
         jdbc.update("""
-            INSERT INTO meeting_exceptions (id, master_meeting_id,
+            INSERT INTO meeting_exception (id, master_meeting_id,
                 original_occurrence_date, new_start_utc, new_end_utc, type)
             VALUES (?, ?, ?, ?, ?, ?)
         """,
@@ -55,7 +55,7 @@ public class MeetingExceptionRepository {
      */
     public List<MeetingException> findByMasterMeetingId(UUID masterMeetingId) {
         return jdbc.query(
-                "SELECT * FROM meeting_exceptions WHERE master_meeting_id = ?",
+                "SELECT * FROM meeting_exception WHERE master_meeting_id = ?",
                 rowMapper, masterMeetingId.toString()
         );
     }
@@ -66,13 +66,13 @@ public class MeetingExceptionRepository {
      */
     public List<MeetingException> findByMasterIdFromDate(UUID masterMeetingId, LocalDate fromDate) {
         return jdbc.query(
-                "SELECT * FROM meeting_exceptions WHERE master_meeting_id = ? AND original_occurrence_date >= ?",
+                "SELECT * FROM meeting_exception WHERE master_meeting_id = ? AND original_occurrence_date >= ?",
                 rowMapper, masterMeetingId.toString(), fromDate.toString()
         );
     }
 
     public void deleteByMasterMeetingId(UUID masterMeetingId) {
-        jdbc.update("DELETE FROM meeting_exceptions WHERE master_meeting_id = ?",
+        jdbc.update("DELETE FROM meeting_exception WHERE master_meeting_id = ?",
                 masterMeetingId.toString());
     }
 }

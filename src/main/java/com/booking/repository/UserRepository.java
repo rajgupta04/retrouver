@@ -30,7 +30,7 @@ public class UserRepository {
 
     public void save(User user) {
         jdbc.update("""
-            INSERT INTO users (id, name, email, timezone, password_hash, created_at)
+            INSERT INTO user (id, name, email, timezone, password_hash, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
         """,
                 user.getId().toString(), user.getName(), user.getEmail(),
@@ -39,13 +39,13 @@ public class UserRepository {
     }
 
     public Optional<User> findById(UUID id) {
-        List<User> results = jdbc.query("SELECT * FROM users WHERE id = ?",
+        List<User> results = jdbc.query("SELECT * FROM user WHERE id = ?",
                 rowMapper, id.toString());
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     public Optional<User> findByEmail(String email) {
-        List<User> results = jdbc.query("SELECT * FROM users WHERE email = ?",
+        List<User> results = jdbc.query("SELECT * FROM user WHERE email = ?",
                 rowMapper, email);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
