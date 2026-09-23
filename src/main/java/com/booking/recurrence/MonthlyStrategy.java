@@ -27,8 +27,7 @@ public class MonthlyStrategy implements RecurrenceExpander {
             // month (e.g. BYMONTHDAY=31 in a 30-day month) — per RFC 5545,
             // the correct behavior is to SKIP that month entirely, not clamp
             // to the last valid day. Clamping silently produces a wrong date
-            // that drifts the pattern — this is exactly the edge case your
-            // assignment PDF calls out.
+            // that drifts the pattern 
             if (occurrenceThisMonth != null
                     && !occurrenceThisMonth.isBefore(dtstart)
                     && !occurrenceThisMonth.isAfter(horizonEnd)
