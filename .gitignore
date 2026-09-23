@@ -4,3 +4,6 @@ target/
 *.iml
 .DS_Store
 local/
+*.db
+*.db-wal
+*.db-shm

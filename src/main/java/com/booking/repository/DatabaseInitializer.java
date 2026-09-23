@@ -116,5 +116,15 @@ public class DatabaseInitializer {
                 UNIQUE (meeting_id, user_id)
             )
         """);
+
+        // Seed default test rooms with standard UUIDs
+        jdbc.execute("""
+            INSERT OR IGNORE INTO room (id, name, capacity, active)
+            VALUES ('11111111-1111-1111-1111-111111111111', 'Conference Room A', 10, 1)
+        """);
+        jdbc.execute("""
+            INSERT OR IGNORE INTO room (id, name, capacity, active)
+            VALUES ('22222222-2222-2222-2222-222222222222', 'Meeting Room B', 6, 1)
+        """);
     }
 }

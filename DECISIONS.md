@@ -120,3 +120,9 @@ Implemented `GlobalExceptionHandler` to translate domain exceptions (`BookingCon
 `StaleVersionException`, `IllegalArgumentException`) into consistent, structured JSON responses
 (`ErrorResponse` with timestamp, status code, error type, and message). Controllers stay thin
 without cluttered `try/catch` blocks.
+
+## Friendly URL Slugs vs. Standard UUIDs (StringToUuidConverter)
+Used a custom Spring `Converter<String, UUID>` to bridge human-friendly path aliases
+(like `/rooms/room-001/bookings`) with strict 128-bit `java.util.UUID`s in domain entities
+and database foreign keys. Prevents `MethodArgumentTypeMismatchException` while maintaining
+RFC 4122 compliance, preventing ID enumeration attacks, and keeping API URLs clean and readable.
