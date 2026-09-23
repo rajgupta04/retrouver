@@ -98,3 +98,25 @@ a case study that's acceptable. BCrypt for password hashing because it's
 deliberately slow (tunable work factor) — prevents brute-force even if
 the hash table leaks. Login returns the same error for "unknown email"
 and "wrong password" to prevent email enumeration attacks.
+
+## Declarative Transactions (@Transactional) for All-or-Nothing Recurrence
+Marked `BookingService` with `@Transactional`. When booking recurring meetings,
+a failure or conflict at the DB level (e.g. attendee batch insertion or network glitch)
+rolls back all meeting, rule, and attendee inserts atomically.
+
+## Read Caching on Rooms with Eviction on Mutation
+Used Spring's caching abstraction (`@Cacheable` and `@CacheEvict`) on `RoomRepository`.
+Rooms are read heavily during booking availability checks but updated rarely.
+Active rooms are cached in-memory, and creating or deactivating a room evicts
+the cache immediately.
+
+## Production Observability via Spring Boot Actuator
+Included `spring-boot-starter-actuator` to expose `/actuator/health` and `/actuator/metrics`.
+Unauthenticated access is allowed specifically for health probes, enabling container
+orchestrators and monitoring dashboards to observe service liveness and JVM metrics.
+
+## Centralized Exception Handling via @RestControllerAdvice
+Implemented `GlobalExceptionHandler` to translate domain exceptions (`BookingConflictException`,
+`StaleVersionException`, `IllegalArgumentException`) into consistent, structured JSON responses
+(`ErrorResponse` with timestamp, status code, error type, and message). Controllers stay thin
+without cluttered `try/catch` blocks.
