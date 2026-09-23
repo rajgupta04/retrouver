@@ -4,6 +4,8 @@ import java.time.*;
 import java.time.zone.ZoneOffsetTransition;
 import java.time.zone.ZoneRules;
 
+import org.springframework.stereotype.Component;
+
 /**
  * Converts local wall-clock times to UTC Instants, handling DST edge cases.
  *
@@ -21,6 +23,7 @@ import java.time.zone.ZoneRules;
  * Both are handled through java.time's ZoneRules API, which exposes the
  * IANA tz database transitions directly — no manual offset arithmetic.
  */
+@Component
 public class TimezoneResolver {
 
     /**

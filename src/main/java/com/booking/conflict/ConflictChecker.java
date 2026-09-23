@@ -3,6 +3,8 @@ package com.booking.conflict;
 import java.time.Instant;
 import java.util.*;
 
+import org.springframework.stereotype.Component;
+
 /**
  * Checks whether a proposed booking [newStart, newEnd) conflicts with any
  * existing booking in the same room.
@@ -20,6 +22,7 @@ import java.util.*;
  * Half-open means a meeting ending at 11:00 and one starting at 11:00 do NOT
  * conflict — the end time is exclusive.
  */
+@Component
 public class ConflictChecker {
 
     // Per-room sorted list of booked intervals. TreeMap would also work,
