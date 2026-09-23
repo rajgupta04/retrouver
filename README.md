@@ -1,5 +1,7 @@
 # retrouver
 
+> *« **retrouver** » (French verb): to find again, to retrieve, or reflexively « **se retrouver** » — to meet up, get together, and reunite.*
+
 Meeting room booking system with recurring meeting support (RRULE-based expansion), conflict detection, timezone/DST handling, and series editing (this/future/all) — Java 17 + Spring Boot 3.3 + SQLite.
 
 ## Quick Start
