@@ -5,7 +5,7 @@ Meeting room booking system with recurring meeting support (RRULE-based expansio
 ## Quick Start
 
 ```bash
-# Prerequisites: Java 21, Maven 3.9+
+# Prerequisites: Java 17+, Maven 3.9+
 mvn spring-boot:run
 # Server starts on http://localhost:8080
 ```
@@ -164,7 +164,7 @@ See [DECISIONS.md](DECISIONS.md) for the full reasoning behind each choice:
 
 | Component | Choice | Why |
 |-----------|--------|-----|
-| Language | Java 21 | Switch expressions, records, text blocks |
+| Language | Java 17 | Switch expressions, records, text blocks |
 | Framework | Spring Boot 3.3 | DI, embedded server, security, JDBC |
 | Database | SQLite | Zero-config, file-based, sufficient for case study |
 | Persistence | JdbcTemplate | Hand-written SQL, no ORM overhead |
