@@ -196,46 +196,46 @@ curl -s -X DELETE "http://localhost:8089/bookings/$BOOKING_ID?scope=ALL" \
 ```mermaid
 flowchart TD
     subgraph Client ["Client Layer"]
-        UserRequests[User API Requests]
-        AdminRequests[Admin / Monitor]
+        UserRequests["User API Requests"]
+        AdminRequests["Admin / Monitor"]
     end
 
     subgraph Presentation ["Presentation Layer (Controllers)"]
-        AuthController[AuthController\n/auth/login, /register]
-        BookingController[BookingController\n/rooms/{id}/bookings...]
+        AuthController["AuthController<br/>/auth/login, /register"]
+        BookingController["BookingController<br/>/rooms/:id/bookings..."]
     end
 
     subgraph CrossCutting ["Cross-Cutting Concerns"]
-        SecurityFilter[JwtAuthFilter\n(Token Validation)]
-        ExceptionHandler[GlobalExceptionHandler\n(@RestControllerAdvice)]
-        Actuator[Spring Actuator\n/actuator/health, /metrics]
+        SecurityFilter["JwtAuthFilter<br/>(Token Validation)"]
+        ExceptionHandler["GlobalExceptionHandler<br/>(@RestControllerAdvice)"]
+        Actuator["Spring Actuator<br/>/actuator/health, /metrics"]
     end
 
     subgraph Service ["Service Layer (Transactions)"]
-        JwtService[JwtService\n(HS256 Token Gen)]
-        BookingService[BookingService\n(@Transactional)]
+        JwtService["JwtService<br/>(HS256 Token Gen)"]
+        BookingService["BookingService<br/>(@Transactional)"]
     end
 
     subgraph DomainAlgorithms ["Core Algorithms & Domain"]
-        Recurrence[RecurrenceExpander\n(Strategy: Daily, Weekly, Monthly)]
-        Conflict[ConflictChecker\n(Sorted Intervals, Binary Search)]
-        Timezone[TimezoneResolver\n(DST Gap & Overlap handling)]
-        DomainEntities[Entities:\nUser, Room, Meeting, Attendee, RecurrenceRule]
+        Recurrence["RecurrenceExpander<br/>(Strategy: Daily, Weekly, Monthly)"]
+        Conflict["ConflictChecker<br/>(Sorted Intervals, Binary Search)"]
+        Timezone["TimezoneResolver<br/>(DST Gap & Overlap handling)"]
+        DomainEntities["Entities:<br/>User, Room, Meeting, Attendee, RecurrenceRule"]
     end
 
     subgraph CacheLayer ["Caching Layer"]
-        SpringCache[Spring Cache\n(@Cacheable, @CacheEvict)]
+        SpringCache["Spring Cache<br/>(@Cacheable, @CacheEvict)"]
     end
 
     subgraph DataAccess ["Data Access Layer (JDBC Repositories)"]
-        UserRepository[UserRepository]
-        RoomRepository[RoomRepository]
-        MeetingRepository[MeetingRepository]
-        AttendeeRepository[AttendeeRepository]
+        UserRepository["UserRepository"]
+        RoomRepository["RoomRepository"]
+        MeetingRepository["MeetingRepository"]
+        AttendeeRepository["AttendeeRepository"]
     end
 
     subgraph Database ["Persistence"]
-        SQLite[(SQLite DB)]
+        SQLite[("SQLite DB")]
     end
 
     %% Routing
