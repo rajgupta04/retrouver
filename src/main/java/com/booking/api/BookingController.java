@@ -8,11 +8,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/rooms")
 public class BookingController {
 
     private final BookingService bookingService;
@@ -21,21 +21,23 @@ public class BookingController {
         this.bookingService = bookingService;
     }
 
-    @PostMapping("/{roomId}/bookings")
+    @PostMapping("/rooms/{roomId}/bookings")
     public ResponseEntity<?> bookSingle(@PathVariable UUID roomId, @RequestBody BookingRequest request) {
         try {
             Meeting meeting = bookingService.bookSingle(roomId, request.organizerId(),
-                    request.start(), request.end(), request.timezoneId(), request.title());
+                    request.attendeeIds(), request.start(), request.end(),
+                    request.timezoneId(), request.title());
             return ResponseEntity.status(201).body(meeting);
         } catch (BookingService.BookingConflictException e) {
             return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
         }
     }
 
-    @PostMapping("/{roomId}/bookings/recurring")
+    @PostMapping("/rooms/{roomId}/bookings/recurring")
     public ResponseEntity<?> bookRecurring(@PathVariable UUID roomId, @RequestBody RecurringBookingRequest request) {
         var result = bookingService.bookRecurring(roomId, request.organizerId(),
-                request.start(), request.end(), request.timezoneId(), request.title(),
+                request.attendeeIds(), request.start(), request.end(),
+                request.timezoneId(), request.title(),
                 request.toRecurrenceRule(), request.horizonEnd());
         return result.success()
                 ? ResponseEntity.status(201).body(result)
@@ -44,18 +46,51 @@ public class BookingController {
 
     @PatchMapping("/bookings/{bookingId}")
     public ResponseEntity<?> editOccurrence(@PathVariable UUID bookingId,
-            @RequestParam BookingService.EditScope scope, @RequestBody EditRequest request) {
-        return ResponseEntity.ok().build(); // wire to BookingService edit methods once persistence is ready
+                                            @RequestParam BookingService.EditScope scope,
+                                            @RequestBody EditRequest request) {
+        try {
+            bookingService.editOccurrence(bookingId, request.occurrenceDate(), scope,
+                    request.newStart(), request.newEnd());
+            return ResponseEntity.ok(Map.of(
+                    "message", "Occurrence edited successfully",
+                    "scope", scope.name()
+            ));
+        } catch (BookingService.BookingConflictException | BookingService.StaleVersionException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
     }
 
-    // Request DTOs — kept in this file for now since they're small; split
-    // into their own files if this grows past ~4 of them.
-    public record BookingRequest(UUID organizerId, LocalDateTime start, LocalDateTime end,
-                                   String timezoneId, String title) {}
+    @DeleteMapping("/bookings/{bookingId}")
+    public ResponseEntity<?> cancelOccurrence(@PathVariable UUID bookingId,
+                                              @RequestParam BookingService.EditScope scope,
+                                              @RequestParam(required = false) LocalDate occurrenceDate) {
+        try {
+            bookingService.cancelOccurrence(bookingId, occurrenceDate, scope);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Occurrence cancelled successfully",
+                    "scope", scope.name()
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
+    }
 
-    public record RecurringBookingRequest(UUID organizerId, LocalDateTime start, LocalDateTime end,
-                                            String timezoneId, String title, LocalDate horizonEnd,
-                                            RuleRequest rule) {
+    @GetMapping("/bookings/{bookingId}/attendees")
+    public ResponseEntity<?> getAttendees(@PathVariable UUID bookingId) {
+        return ResponseEntity.ok(bookingService.getAttendees(bookingId));
+    }
+
+    // Request DTOs
+    public record BookingRequest(UUID organizerId, List<UUID> attendeeIds,
+                                 LocalDateTime start, LocalDateTime end,
+                                 String timezoneId, String title) {}
+
+    public record RecurringBookingRequest(UUID organizerId, List<UUID> attendeeIds,
+                                          LocalDateTime start, LocalDateTime end,
+                                          String timezoneId, String title, LocalDate horizonEnd,
+                                          RuleRequest rule) {
         RecurrenceRule toRecurrenceRule() {
             RecurrenceRule r = new RecurrenceRule(UUID.randomUUID(), rule.freq());
             if (rule.intervalN() != null) r.setIntervalN(rule.intervalN());
@@ -69,7 +104,7 @@ public class BookingController {
     }
 
     public record RuleRequest(RecurrenceRule.Frequency freq, Integer intervalN, String[] byDay,
-                                Integer byMonthDay, Integer bySetPos, Integer count, LocalDate until) {}
+                              Integer byMonthDay, Integer bySetPos, Integer count, LocalDate until) {}
 
     public record EditRequest(LocalDate occurrenceDate, LocalDateTime newStart, LocalDateTime newEnd) {}
 }
