@@ -1,79 +1,192 @@
 # retrouver
 
-Meeting room booking system with recurring meeting support (RRULE-based expansion), conflict detection, timezone/DST handling, and series editing (this/future/all) — Java 21 + Spring Boot + SQLite.
+Meeting room booking system with recurring meeting support (RRULE-based expansion), conflict detection, timezone/DST handling, and series editing (this/future/all) — Java 17 + Spring Boot 3.3 + SQLite.
 
 ## Quick Start
 
 ```bash
-# Prerequisites: Java 17+, Maven 3.9+
-mvn spring-boot:run
-# Server starts on http://localhost:8080
+# Prerequisites: Java 17 LTS, Maven 3.9+
+mvn clean compile
+mvn test                # 59 tests passing, 0 failures
+mvn spring-boot:run     # Server starts on http://localhost:8089
 ```
 
-## API Reference
+> **Note:** Default rooms (`room-001` and `room-002`) are automatically seeded into SQLite on startup.
 
-### Auth
+---
 
-```
-POST /auth/register
-Body: { "name": "Raj", "email": "raj@lpu.in", "timezone": "Asia/Kolkata", "password": "secret" }
-→ 201 { "token": "eyJ...", "userId": "..." }
+## API Reference & Complete cURL Testing Guide
 
-POST /auth/login
-Body: { "email": "raj@lpu.in", "password": "secret" }
-→ 200 { "token": "eyJ...", "userId": "..." }
-```
+All booking endpoints require an `Authorization: Bearer <token>` header obtained from `/auth/register` or `/auth/login`.
 
-All endpoints below require `Authorization: Bearer <token>`.
+### 1. System Monitoring (Actuator)
 
-### Bookings & Monitoring
+```bash
+# Health Check (Public probe)
+curl -s http://localhost:8089/actuator/health
 
-```
-POST   /rooms/{roomId}/bookings               → book a single meeting (with attendees)
-POST   /rooms/{roomId}/bookings/recurring      → book a recurring series (with attendees)
-PATCH  /bookings/{bookingId}?scope=THIS|THIS_AND_FUTURE|ALL → edit occurrence(s)
-DELETE /bookings/{bookingId}?scope=THIS|THIS_AND_FUTURE|ALL → cancel occurrence(s)
-GET    /bookings/{bookingId}/attendees        → list attendees and RSVP status
-GET    /actuator/health                       → service health check (public)
-GET    /actuator/metrics                      → JVM & application metrics (public)
+# Application Metrics
+curl -s http://localhost:8089/actuator/metrics
 ```
 
-**Single booking request:**
-```json
-{
-  "organizerId": "uuid",
-  "attendeeIds": ["uuid-1", "uuid-2"],
-  "start": "2026-01-15T10:00:00",
-  "end": "2026-01-15T11:00:00",
-  "timezoneId": "Asia/Kolkata",
-  "title": "Sprint Planning"
-}
+### 2. User Authentication
+
+```bash
+# Register User (returns JWT token and userId)
+curl -s -X POST http://localhost:8089/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Raj Gupta",
+    "email": "raj@lpu.in",
+    "timezone": "Asia/Kolkata",
+    "password": "password123"
+  }'
+# → 201 { "token": "eyJ...", "userId": "uuid-here" }
+
+# Login
+curl -s -X POST http://localhost:8089/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "raj@lpu.in",
+    "password": "password123"
+  }'
 ```
 
-**Recurring booking request:**
-```json
-{
-  "organizerId": "uuid",
-  "attendeeIds": ["uuid-1", "uuid-2"],
-  "start": "2026-01-15T10:00:00",
-  "end": "2026-01-15T11:00:00",
-  "timezoneId": "America/New_York",
-  "title": "Weekly Standup",
-  "horizonEnd": "2027-01-15",
-  "rule": {
-    "freq": "WEEKLY",
-    "intervalN": 1,
-    "byDay": ["MO", "WE", "FR"],
-    "count": 52
-  }
-}
+### 3. One-Off Bookings & Conflict Detection
+
+```bash
+# Book Single Meeting with Attendees (Asia/Kolkata → converts to UTC)
+curl -s -X POST http://localhost:8089/rooms/room-001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "organizerId": "'$USER_ID'",
+    "attendeeIds": ["'$ATTENDEE_ID'"],
+    "start": "2027-05-10T10:00:00",
+    "end": "2027-05-10T11:00:00",
+    "timezoneId": "Asia/Kolkata",
+    "title": "Quarterly Sprint Planning"
+  }'
+# → 201 Created
+
+# Query Attendees & RSVP Status
+curl -s -X GET http://localhost:8089/bookings/$BOOKING_ID/attendees \
+  -H "Authorization: Bearer $TOKEN"
+
+# Overlapping Conflict Check (Rejects 10:30 to 11:30 clash)
+curl -s -X POST http://localhost:8089/rooms/room-001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "organizerId": "'$USER_ID'",
+    "start": "2027-05-10T10:30:00",
+    "end": "2027-05-10T11:30:00",
+    "timezoneId": "Asia/Kolkata",
+    "title": "Conflicting Meeting"
+  }'
+# → 409 Conflict: "Room is already booked for the requested time slot"
+
+# Half-Open Interval Rule (11:00 to 12:00 back-to-back touches boundary — SUCCEEDS)
+curl -s -X POST http://localhost:8089/rooms/room-001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "organizerId": "'$USER_ID'",
+    "start": "2027-05-10T11:00:00",
+    "end": "2027-05-10T12:00:00",
+    "timezoneId": "Asia/Kolkata",
+    "title": "Back to Back Meeting"
+  }'
+# → 201 Created (no false clash)
 ```
 
-**Conflict response (409):**
-```json
-{
-  "conflictDates": ["2026-02-16", "2026-03-09"]
-}
+### 4. Recurring Meetings & All-or-Nothing Rejection
+
+```bash
+# Book Weekly MWF Recurring Series across timezones (America/New_York)
+curl -s -X POST http://localhost:8089/rooms/room-002/bookings/recurring \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "organizerId": "'$USER_ID'",
+    "start": "2027-07-05T09:00:00",
+    "end": "2027-07-05T09:30:00",
+    "timezoneId": "America/New_York",
+    "title": "Engineering Standup",
+    "horizonEnd": "2027-09-30",
+    "rule": {
+      "freq": "WEEKLY",
+      "intervalN": 1,
+      "byDay": ["MO", "WE", "FR"],
+      "count": 12
+    }
+  }'
+# → 201 { "success": true, "meeting": {...}, "conflictDates": [] }
+
+# All-or-Nothing Series Conflict (Overlapping Mondays rejected with exact dates)
+curl -s -X POST http://localhost:8089/rooms/room-002/bookings/recurring \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "organizerId": "'$USER_ID'",
+    "start": "2027-07-05T09:00:00",
+    "end": "2027-07-05T09:30:00",
+    "timezoneId": "America/New_York",
+    "title": "Clashing Monday Series",
+    "horizonEnd": "2027-09-30",
+    "rule": {
+      "freq": "WEEKLY",
+      "intervalN": 1,
+      "byDay": ["MO"],
+      "count": 4
+    }
+  }'
+# → 409 Conflict: { "conflictDates": ["2027-07-05", "2027-07-12", "2027-07-19", "2027-07-26"] }
+```
+
+### 5. Series Editing — The 3 Real Choices (THIS / THIS_AND_FUTURE / ALL)
+
+```bash
+# 1. Scope THIS: Edit a single occurrence (creates MeetingException override)
+curl -s -X PATCH "http://localhost:8089/bookings/$BOOKING_ID?scope=THIS" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "occurrenceDate": "2027-07-07",
+    "newStart": "2027-07-07T14:00:00",
+    "newEnd": "2027-07-07T15:00:00"
+  }'
+
+# 2. Scope THIS: Cancel a single occurrence (frees slot for that date only)
+curl -s -X DELETE "http://localhost:8089/bookings/$BOOKING_ID?scope=THIS&occurrenceDate=2027-07-09" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3. Scope THIS_AND_FUTURE: Edit series split (truncates old, creates child series)
+curl -s -X PATCH "http://localhost:8089/bookings/$BOOKING_ID?scope=THIS_AND_FUTURE" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "occurrenceDate": "2027-07-16",
+    "newStart": "2027-07-16T15:00:00",
+    "newEnd": "2027-07-16T16:00:00"
+  }'
+
+# 4. Scope THIS_AND_FUTURE: Cancel future occurrences (truncates rule UNTIL date)
+curl -s -X DELETE "http://localhost:8089/bookings/$BOOKING_ID?scope=THIS_AND_FUTURE&occurrenceDate=2027-07-23" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5. Scope ALL: Edit entire series (re-validates all occurrences with optimistic lock)
+curl -s -X PATCH "http://localhost:8089/bookings/$BOOKING_ID?scope=ALL" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "newStart": "2027-05-10T16:00:00",
+    "newEnd": "2027-05-10T17:00:00"
+  }'
+
+# 6. Scope ALL: Cancel entire series (marks status CANCELLED)
+curl -s -X DELETE "http://localhost:8089/bookings/$BOOKING_ID?scope=ALL" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Architecture
@@ -249,21 +362,24 @@ See [DECISIONS.md](DECISIONS.md) for the full reasoning behind each choice:
 10. Stateless JWT over sessions (no server-side state)
 11. Atomic series transactions via `@Transactional`
 12. Read caching on rooms with mutation eviction
-13. Observability with Spring Boot Actuator
-14. Uniform error envelopes via `@RestControllerAdvice`
+13. Declarative `@Transactional` for atomic All-or-Nothing persistence
+14. Read caching on rooms with mutation eviction (`@Cacheable` / `@CacheEvict`)
+15. Production observability with Spring Boot Actuator (`/health`, `/metrics`)
+16. Centralized exception handling via `@RestControllerAdvice`
+17. Custom `StringToUuidConverter` for human-friendly URL slugs (`room-001`)
 
 ## Tech Stack
 
 | Component | Choice | Why |
 |-----------|--------|-----|
-| Language | Java 17 | Switch expressions, records, text blocks |
+| Language | Java 17 LTS | Switch expressions, records, text blocks |
 | Framework | Spring Boot 3.3 | DI, embedded server, security, JDBC, actuator, cache |
 | Database | SQLite | Zero-config, file-based, sufficient for case study |
 | Persistence | JdbcTemplate | Hand-written SQL, no ORM overhead |
-| Auth | Spring Security + JJWT | Stateless JWT, BCrypt |
+| Auth | Spring Security + JJWT | Stateless JWT (HS256), BCrypt hashing |
 | Monitoring | Spring Boot Actuator | Production health and metrics endpoints |
-| Testing | JUnit 5 + Mockito | Via spring-boot-starter-test (57 tests) |
-| Build | Maven | Standard, no Gradle complexity |
+| Testing | JUnit 5 + Mockito | Via spring-boot-starter-test (59 tests passing, 0 failures) |
+| Build | Maven | Standard, clean lifecycle |
 
 ## Project Structure
 
@@ -272,12 +388,13 @@ src/main/java/com/booking/
 ├── BookingApplication.java          # Spring Boot entry point (@EnableCaching)
 ├── api/
 │   ├── BookingController.java       # REST endpoints + request DTOs
-│   └── GlobalExceptionHandler.java  # Centralized exception envelope
+│   ├── GlobalExceptionHandler.java  # Centralized exception envelope
+│   └── StringToUuidConverter.java   # Maps friendly slugs (room-001) to UUIDs
 ├── auth/
 │   ├── AuthController.java          # Register + login
 │   ├── JwtService.java              # Token generation + validation
 │   ├── JwtAuthFilter.java           # Bearer token extraction filter
-│   └── SecurityConfig.java          # Spring Security configuration
+│   └── SecurityConfig.java          # Spring Security & CORS configuration
 ├── conflict/
 │   └── ConflictChecker.java         # Sorted interval list + binary search
 ├── domain/
@@ -293,7 +410,7 @@ src/main/java/com/booking/
 │   ├── WeeklyStrategy.java          # Every N weeks on chosen weekdays
 │   └── MonthlyStrategy.java         # By month day OR by day+setpos
 ├── repository/
-│   ├── DatabaseInitializer.java     # SQLite DDL (CREATE TABLE IF NOT EXISTS)
+│   ├── DatabaseInitializer.java     # SQLite DDL + auto-seeds default rooms
 │   ├── AttendeeRepository.java      # CRUD for attendees
 │   ├── MeetingRepository.java       # CRUD + optimistic lock update
 │   ├── MeetingExceptionRepository.java
@@ -311,7 +428,7 @@ src/test/java/com/booking/
 ├── recurrence/
 │   └── RecurrenceExpanderTest.java  # 18 tests (all 3 strategies + edge cases)
 ├── service/
-│   └── BookingServiceTest.java      # 7 tests (all-or-nothing, series edit/cancel, attendees)
+│   └── BookingServiceTest.java      # 9 tests (all-or-nothing, series edit/cancel THIS/FUTURE/ALL, attendees)
 └── timezone/
     └── TimezoneResolverTest.java    # 14 tests (gap, overlap, cross-DST recurring)
 ```
