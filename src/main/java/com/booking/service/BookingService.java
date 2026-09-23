@@ -10,6 +10,7 @@ import com.booking.recurrence.*;
 import com.booking.repository.*;
 import com.booking.timezone.TimezoneResolver;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
 import java.util.*;
@@ -25,12 +26,14 @@ import java.util.*;
  * This separation of concerns is deliberate and interview-grade.
  */
 @Service
+@Transactional
 public class BookingService {
 
     private final MeetingRepository meetingRepo;
     private final RecurrenceRuleRepository ruleRepo;
     private final MeetingExceptionRepository exceptionRepo;
     private final RoomRepository roomRepo;
+    private final AttendeeRepository attendeeRepo;
     private final ConflictChecker conflictChecker;
     private final TimezoneResolver timezoneResolver;
 
@@ -42,12 +45,14 @@ public class BookingService {
                           RecurrenceRuleRepository ruleRepo,
                           MeetingExceptionRepository exceptionRepo,
                           RoomRepository roomRepo,
+                          AttendeeRepository attendeeRepo,
                           ConflictChecker conflictChecker,
                           TimezoneResolver timezoneResolver) {
         this.meetingRepo = meetingRepo;
         this.ruleRepo = ruleRepo;
         this.exceptionRepo = exceptionRepo;
         this.roomRepo = roomRepo;
+        this.attendeeRepo = attendeeRepo;
         this.conflictChecker = conflictChecker;
         this.timezoneResolver = timezoneResolver;
 
@@ -62,12 +67,18 @@ public class BookingService {
     // BOOK SINGLE
     // ========================================================================
 
-    /**
-     * Book a one-off (non-recurring) meeting.
-     *
-     * Flow: convert local→UTC → check conflicts → persist → register in index.
-     */
     public Meeting bookSingle(UUID roomId, UUID organizerId,
+                              LocalDateTime localStart, LocalDateTime localEnd,
+                              String timezoneId, String title) {
+        return bookSingle(roomId, organizerId, List.of(), localStart, localEnd, timezoneId, title);
+    }
+
+    /**
+     * Book a one-off (non-recurring) meeting with optional attendees.
+     *
+     * Flow: convert local→UTC → check conflicts → persist meeting & attendees → register in index.
+     */
+    public Meeting bookSingle(UUID roomId, UUID organizerId, List<UUID> attendeeIds,
                               LocalDateTime localStart, LocalDateTime localEnd,
                               String timezoneId, String title) {
 
@@ -83,6 +94,8 @@ public class BookingService {
         Meeting meeting = new Meeting(UUID.randomUUID(), roomId, organizerId,
                 startUtc, endUtc, timezoneId, title);
         meetingRepo.save(meeting);
+
+        saveAttendees(meeting.getId(), attendeeIds);
         conflictChecker.addBooking(roomId, startUtc, endUtc);
 
         return meeting;
@@ -92,17 +105,24 @@ public class BookingService {
     // BOOK RECURRING
     // ========================================================================
 
+    public RecurringBookingResult bookRecurring(UUID roomId, UUID organizerId,
+                                                 LocalDateTime localStart, LocalDateTime localEnd,
+                                                 String timezoneId, String title,
+                                                 RecurrenceRule rule, LocalDate horizonEnd) {
+        return bookRecurring(roomId, organizerId, List.of(), localStart, localEnd, timezoneId, title, rule, horizonEnd);
+    }
+
     /**
-     * Book a recurring meeting series.
+     * Book a recurring meeting series with optional attendees.
      *
      * Flow:
      * 1. Expand recurrence rule into concrete dates (pure date math)
      * 2. Convert each date to UTC using TimezoneResolver (DST-aware)
      * 3. Batch-check all occurrences against the room's conflict index
-     * 4. If any conflict → return the conflict list, don't persist anything
-     * 5. If all clear → persist rule + meeting + register all in the index
+     * 4. If any conflict → return the conflict list, don't persist anything (all-or-nothing)
+     * 5. If all clear → persist rule + meeting + attendees + register all in the index
      */
-    public RecurringBookingResult bookRecurring(UUID roomId, UUID organizerId,
+    public RecurringBookingResult bookRecurring(UUID roomId, UUID organizerId, List<UUID> attendeeIds,
                                                  LocalDateTime localStart, LocalDateTime localEnd,
                                                  String timezoneId, String title,
                                                  RecurrenceRule rule, LocalDate horizonEnd) {
@@ -137,7 +157,7 @@ public class BookingService {
             return new RecurringBookingResult(false, null, conflictDates);
         }
 
-        // 4. Persist — rule first (FK target), then meeting
+        // 4. Persist — rule first (FK target), then meeting, then attendees
         ruleRepo.save(rule);
 
         Instant firstStart = proposedIntervals.get(0).start;
@@ -147,12 +167,29 @@ public class BookingService {
         meeting.setRecurrenceRuleId(rule.getId());
         meetingRepo.save(meeting);
 
+        saveAttendees(meeting.getId(), attendeeIds);
+
         // 5. Register all occurrences in the in-memory conflict index
         for (Interval interval : proposedIntervals) {
             conflictChecker.addBooking(roomId, interval.start, interval.end);
         }
 
         return new RecurringBookingResult(true, meeting, List.of());
+    }
+
+    private void saveAttendees(UUID meetingId, List<UUID> attendeeIds) {
+        if (attendeeIds != null && !attendeeIds.isEmpty()) {
+            List<Attendee> attendees = attendeeIds.stream()
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .map(attId -> new Attendee(UUID.randomUUID(), meetingId, attId))
+                    .toList();
+            attendeeRepo.saveAll(attendees);
+        }
+    }
+
+    public List<Attendee> getAttendees(UUID meetingId) {
+        return attendeeRepo.findByMeetingId(meetingId);
     }
 
     // ========================================================================
