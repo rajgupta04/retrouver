@@ -78,16 +78,88 @@ GET    /actuator/metrics                      → JVM & application metrics (pub
 
 ## Architecture
 
-```
-Client request
-  → BookingController (API layer — REST endpoints, request DTOs)
-    → BookingService (orchestrator — the ONLY place all concerns meet)
-      → RecurrenceExpander (strategy pattern: Daily/Weekly/Monthly)
-      → ConflictChecker (sorted list + binary search per room)
-      → TimezoneResolver (DST gap/fold handling via java.time ZoneRules)
-      → Repositories (JdbcTemplate → SQLite)
-    → Domain entities (plain POJOs — Meeting, RecurrenceRule, Room, User, etc.)
-  → SQLite database (retrouver.db)
+```mermaid
+flowchart TD
+    subgraph Client ["Client Layer"]
+        UserRequests[User API Requests]
+        AdminRequests[Admin / Monitor]
+    end
+
+    subgraph Presentation ["Presentation Layer (Controllers)"]
+        AuthController[AuthController\n/auth/login, /register]
+        BookingController[BookingController\n/rooms/{id}/bookings...]
+    end
+
+    subgraph CrossCutting ["Cross-Cutting Concerns"]
+        SecurityFilter[JwtAuthFilter\n(Token Validation)]
+        ExceptionHandler[GlobalExceptionHandler\n(@RestControllerAdvice)]
+        Actuator[Spring Actuator\n/actuator/health, /metrics]
+    end
+
+    subgraph Service ["Service Layer (Transactions)"]
+        JwtService[JwtService\n(HS256 Token Gen)]
+        BookingService[BookingService\n(@Transactional)]
+    end
+
+    subgraph DomainAlgorithms ["Core Algorithms & Domain"]
+        Recurrence[RecurrenceExpander\n(Strategy: Daily, Weekly, Monthly)]
+        Conflict[ConflictChecker\n(Sorted Intervals, Binary Search)]
+        Timezone[TimezoneResolver\n(DST Gap & Overlap handling)]
+        DomainEntities[Entities:\nUser, Room, Meeting, Attendee, RecurrenceRule]
+    end
+
+    subgraph CacheLayer ["Caching Layer"]
+        SpringCache[Spring Cache\n(@Cacheable, @CacheEvict)]
+    end
+
+    subgraph DataAccess ["Data Access Layer (JDBC Repositories)"]
+        UserRepository[UserRepository]
+        RoomRepository[RoomRepository]
+        MeetingRepository[MeetingRepository]
+        AttendeeRepository[AttendeeRepository]
+    end
+
+    subgraph Database ["Persistence"]
+        SQLite[(SQLite DB)]
+    end
+
+    %% Routing
+    UserRequests --> SecurityFilter
+    AdminRequests --> Actuator
+    SecurityFilter --> AuthController
+    SecurityFilter --> BookingController
+
+    %% Exceptions
+    AuthController -.-> ExceptionHandler
+    BookingController -.-> ExceptionHandler
+    BookingService -.-> ExceptionHandler
+
+    %% Controller to Service
+    AuthController --> JwtService
+    AuthController --> UserRepository
+    BookingController --> BookingService
+
+    %% Service to Algorithms
+    BookingService --> Recurrence
+    BookingService --> Conflict
+    BookingService --> Timezone
+    BookingService --> DomainEntities
+
+    %% Service to Data
+    BookingService --> MeetingRepository
+    BookingService --> AttendeeRepository
+    BookingService --> RoomRepository
+    BookingService --> UserRepository
+    
+    %% Caching
+    BookingService -.-> SpringCache
+    SpringCache -.-> RoomRepository
+
+    %% Repositories to DB
+    UserRepository --> SQLite
+    RoomRepository --> SQLite
+    MeetingRepository --> SQLite
+    AttendeeRepository --> SQLite
 ```
 
 **Key separation of concerns:** RecurrenceExpander never knows about conflicts. ConflictChecker never knows about recurrence. TimezoneResolver never knows about the domain. They only meet inside BookingService.
